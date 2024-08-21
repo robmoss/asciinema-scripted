@@ -1,0 +1,44 @@
+output_file: demo_script.cast
+start_delay: 0.3
+end_delay: 0.5
+typing_delay:
+- 0.05
+- 0.25
+pre_nl_delay:
+- 0.2
+- 0.2
+post_nl_delay:
+- 0.8
+- 1.0
+with_comments: true
+comments_at_top: false
+actions:
+- action_id: Comment
+  comment: See what files are here
+- ls
+- action_id: Comment
+  comment: How large are these files?
+- action_id: Input
+  text: du -h *
+  pre_nl_delay: 1
+  post_nl_delay: 3
+- action_id: Marker
+  label: Sum disk usage of all files
+- action_id: Comment
+  comment: What is the total disk usage?
+- action_id: Input
+  text: du -c -h * | grep total
+  pre_nl_delay: 1
+  post_nl_delay: 3
+- action_id: Comment
+  comment: Goodbye
+- '# The end'
+- action_id: Marker
+  label: END
+- exit
+filters:
+- filter_id: EndMarkerFilter
+  end_label: END
+- filter_id: CommentFilter
+cols: 80
+rows: 24

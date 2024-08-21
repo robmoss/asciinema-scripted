@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling ~= 1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asciinema-scripted"
+version = "0.1"
+description = "Generate scripted asciinema recordings"
+readme = "README.md"
+requires-python = ">= 3.10"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Rob Moss", email = "rgmoss@unimelb.edu.au"}
+]
+maintainers = [
+  {name = "Rob Moss", email = "rgmoss@unimelb.edu.au"}
+]
+dependencies = [
+  "numpy >= 1.17",
+  "pexpect ~= 4.8",
+  "tomli ~= 2.0",
+  "tomli-w ~= 1.0",
+]
+
+[project.scripts]
+asciinema-scripted = "asciinema_scripted.__main__:main"
+
+[project.optional-dependencies]
+yaml = [
+  "pyyaml ~= 6.0",
+]
+tests = [
+  "pytest",
+  "pytest-cov ~= 5.0",
+]
+
+[tool.ruff]
+line-length = 78
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable pyflakes (F), pycodestyle (E, W), flake8-bugbear (B), pyupgrade (UP),
+# flake8-debugger (T10), and NumPy (NPY).
+select = ["F", "E", "W", "B", "UP", "T10", "NPY"]
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+addopts = """\
+    --doctest-modules \
+    --doctest-glob='*.rst' \
+    --capture=no \
+    --cov-report term \
+    --cov-report html\
+    """
