@@ -16,6 +16,12 @@ This repository provides an `asciinema-scripted` tool that allows you to record 
 
 Note that there are many other [asciinema tools](https://docs.asciinema.org/integrations/), which you may find useful.
 
+## Demonstration
+
+The [demonstration script](demo_script.yaml) shows how to define input lines, adjust input delays, and insert markers and comments:
+
+![Demonstration](demo_script.gif)
+
 ## License
 
 The code is distributed under the terms of the [BSD 3-Clause license](https://opensource.org/licenses/BSD-3-Clause) (see `LICENSE`).
