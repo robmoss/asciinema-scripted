@@ -5,6 +5,8 @@ Provide wrapper classes for the asciinema file format (version 2).
 import dataclasses
 import json
 import re
+from pathlib import Path
+from typing import Any, Self, override
 
 
 @dataclasses.dataclass
@@ -27,7 +29,7 @@ class Header:
     env: dict[str, str] | None = None
     theme: Theme | None = None
 
-    def as_data(self):
+    def as_data(self) -> dict[str, Any]:
         return {
             name: value
             for (name, value) in dataclasses.asdict(self).items()
@@ -39,10 +41,10 @@ class Header:
 class Event:
     time: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.event_id = self.__class__.__name__
 
-    def as_data(self):
+    def as_data(self) -> list[float | str] | None:
         raise NotImplementedError()
 
 
@@ -50,7 +52,8 @@ class Event:
 class OutputEvent(Event):
     data: str
 
-    def as_data(self):
+    @override
+    def as_data(self) -> list[float | str] | None:
         return [self.time, 'o', self.data]
 
 
@@ -58,7 +61,8 @@ class OutputEvent(Event):
 class InputEvent(Event):
     data: str
 
-    def as_data(self):
+    @override
+    def as_data(self) -> list[float | str] | None:
         return [self.time, 'i', self.data]
 
 
@@ -66,7 +70,8 @@ class InputEvent(Event):
 class MarkerEvent(Event):
     label: str
 
-    def as_data(self):
+    @override
+    def as_data(self) -> list[float | str] | None:
         return [self.time, 'm', self.label]
 
 
@@ -82,7 +87,8 @@ class CommentEvent(Event):
     top: bool
     comment: str
 
-    def as_data(self):
+    @override
+    def as_data(self) -> list[float | str] | None:
         raise ValueError('Comment events must be filtered')
 
 
@@ -91,8 +97,20 @@ class ResizeEvent(Event):
     columns: int
     rows: int
 
-    def as_data(self):
+    @override
+    def as_data(self) -> list[float | str] | None:
         return [self.time, 'r', f'{self.columns}x{self.rows}']
+
+
+@dataclasses.dataclass
+class Filter:
+    filter_id: str = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.filter_id = self.__class__.__name__
+
+    def apply(self, header: Header, events: list[Event]) -> list[Event]:
+        raise NotImplementedError()
 
 
 @dataclasses.dataclass
@@ -104,13 +122,13 @@ class AsciiCast:
     header: Header
     events: list[Event]
 
-    def filter_events(self, filters):
+    def filter_events(self, filters: list[Filter]) -> Self:
         event_list = self.events
         for event_filter in filters:
             event_list = event_filter.apply(self.header, event_list)
         return dataclasses.replace(self, events=event_list)
 
-    def insert_events(self, events):
+    def insert_events(self, events: list[Event]) -> Self:
         if len(events) == 0:
             return self
         if len(self.events) == 0:
@@ -121,7 +139,8 @@ class AsciiCast:
             raise ValueError('Events must be sorted chronologically')
 
         new_events = []
-        next_event, remaining_events = events[0], events[1:]
+        next_event: Event | None = events[0]
+        remaining_events: list[Event] = events[1:]
         for current_event in self.events:
             if next_event is None or current_event.time <= next_event.time:
                 new_events.append(current_event)
@@ -146,7 +165,7 @@ class AsciiCast:
         return dataclasses.replace(self, events=new_events)
 
     @staticmethod
-    def load(cast_file):
+    def load(cast_file: str | Path) -> 'AsciiCast':
         """
         Load an asciinema screencast from ``cast_file``.
         """
@@ -154,13 +173,13 @@ class AsciiCast:
             data = [json.loads(line) for line in f]
         return parse_cast(data)
 
-    def to_lines(self):
+    def to_lines(self) -> list[str]:
         header_record = self.header.as_data()
         event_records = [event.as_data() for event in self.events]
         records = [header_record] + event_records
         return [json.dumps(record) for record in records]
 
-    def save(self, cast_file):
+    def save(self, cast_file: str | Path) -> None:
         """
         Save this asciinema screencast to ``cast_file``.
         """
@@ -171,7 +190,7 @@ class AsciiCast:
                 f.write(f'{line}\n')
 
 
-def parse_cast(data):
+def parse_cast(data: list[dict[str, Any]]) -> AsciiCast:
     if isinstance(data[0], dict):
         try:
             header = Header(**data[0])
@@ -183,7 +202,7 @@ def parse_cast(data):
             )
     else:
         raise ValueError('Missing asciicast header')
-    events = []
+    events: list[Event] = []
     resize_re = re.compile(r'^([0-9]+)x([0-9]+)$')
     for ix, line in enumerate(data[1:]):
         if not (isinstance(line, list) and len(line) == 3):

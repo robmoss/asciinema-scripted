@@ -1,7 +1,9 @@
-from .script import MarkerEvent
+from .cast import AsciiCast, Event, MarkerEvent
 
 
-def marker_md_list(events, data_video_id=None):
+def marker_md_list(
+    events: list[Event], data_video_id: str | None = None
+) -> list[str]:
     if data_video_id is None:
         data_video_attr = ''
     else:
@@ -19,7 +21,7 @@ def marker_md_list(events, data_video_id=None):
     return lines
 
 
-def print_marker_md_list(cast, data_video_id):
+def print_marker_md_list(cast: AsciiCast, data_video_id: str | None) -> None:
     lines = marker_md_list(cast.events, data_video_id)
     for ix, line in enumerate(lines):
         print(f'{ix + 1}. {line}')

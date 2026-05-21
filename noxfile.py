@@ -11,10 +11,24 @@ def build(session):
 @nox.session()
 def ruff(session):
     """Check code for linter warnings and formatting issues."""
-    check_files = ['src', 'noxfile.py']
-    session.install('ruff ~= 0.6')
+    check_files = ['src', 'tests', 'noxfile.py']
+    session.install('ruff >= 0.15')
     session.run('ruff', 'check', *check_files)
     session.run('ruff', 'format', '--diff', *check_files)
+
+
+@nox.session()
+def mypy(session):
+    """Check code for type errors."""
+    session.install('.[tests,typing]', 'mypy')
+    session.run('mypy', 'src', 'tests')
+
+
+@nox.session()
+def pyrefly(session):
+    """Check code for type errors."""
+    session.install('.[tests,typing]', 'pyrefly')
+    session.run('pyrefly', 'check', 'src', 'tests')
 
 
 @nox.session()

@@ -3,10 +3,10 @@ from asciinema_scripted.__main__ import main
 from asciinema_scripted.util import marker_md_list
 from pathlib import Path
 
-from tests.test_script_parsing import demo_script
+from demo import demo_script
 
 
-def test_run_demo():
+def test_run_demo() -> None:
     """
     Run the demonstration script and ensure that only 1 of the 2 markers is
     recorded (the other marker is used to truncate the recording).
@@ -22,7 +22,7 @@ def test_run_demo():
     # Save the script to disk and run it.
     script_file = 'demo_script.yaml'
     script.to_yaml(script_file)
-    main([script_file])
+    main(['--quiet', script_file])
 
     # Ensure the output file exists.
     assert output_file.exists()

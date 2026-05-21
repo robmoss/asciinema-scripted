@@ -1,37 +1,41 @@
 import argparse
-import pathlib
+from pathlib import Path
 import sys
+
+from collections.abc import Callable
 
 from .cast import AsciiCast
 from .script import Script
 from .util import print_marker_md_list
 
 
-def main(args=None):
+def main(args: list[str] | None = None) -> int:
     p = parser()
-    args = p.parse_args(args=args)
+    opts = p.parse_args(args=args)
 
-    script_file = pathlib.Path(args.script_file).resolve()
+    script_file = Path(opts.script_file).resolve()
     if not script_file.exists():
-        raise ValueError(f'Invalid script file: "{args[0]}"')
+        raise ValueError(f'Invalid script file: "{opts.script_file}"')
 
-    load_fun = script_loader(script_file, args.format)
+    load_fun = script_loader(script_file, opts.format)
     script = load_fun(script_file)
 
-    if not args.dont_run:
-        script.run(quiet=args.quiet)
+    if not opts.dont_run:
+        script.run(quiet=opts.quiet)
 
-    if args.print_markers:
+    if opts.print_markers:
         # NOTE: resolve the output file location with respect to the script
         # directory.
         output_file = script_file.parent.joinpath(script.output_file)
         cast = AsciiCast.load(output_file)
-        print_marker_md_list(cast, data_video_id=args.data_id)
+        print_marker_md_list(cast, data_video_id=opts.data_id)
 
     return 0
 
 
-def script_loader(script_file, file_format=None):
+def script_loader(
+    script_file: Path, file_format: str | None = None
+) -> Callable[[str | Path], Script]:
     if file_format is not None:
         file_format = file_format.upper()
         if file_format == 'JSON':
@@ -54,7 +58,7 @@ def script_loader(script_file, file_format=None):
             raise ValueError(f'Unknown file extension: {script_file.suffix}')
 
 
-def parser():
+def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description='Generate scripted asciinema recordings'
     )

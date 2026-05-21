@@ -7,7 +7,7 @@ name = "asciinema-scripted"
 version = "0.1"
 description = "Generate scripted asciinema recordings"
 readme = "README.md"
-requires-python = ">= 3.10"
+requires-python = ">= 3.13"
 license = {file = "LICENSE"}
 authors = [
   {name = "Rob Moss", email = "rgmoss@unimelb.edu.au"}
@@ -33,10 +33,14 @@ tests = [
   "pytest",
   "pytest-cov ~= 5.0",
 ]
+typing = [
+  "types-pexpect",
+  "types-PyYAML",
+]
 
 [tool.ruff]
 line-length = 78
-target-version = "py310"
+target-version = "py313"
 
 [tool.ruff.lint]
 # Enable pyflakes (F), pycodestyle (E, W), flake8-bugbear (B), pyupgrade (UP),
@@ -55,3 +59,15 @@ addopts = """\
     --cov-report term \
     --cov-report html\
     """
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# NOTE: the following settings will be enabled by default in mypy 2.0.
+local_partial_types = true
+strict_bytes = true
+
+[tool.pyrefly]
+python-version = "3.13.5"
+preset = "strict"
+search-path = [".", "tests"]

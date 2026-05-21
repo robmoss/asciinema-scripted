@@ -9,14 +9,25 @@ import time
 import tomli
 import tomli_w
 
-from .cast import AsciiCast, OutputEvent, MarkerEvent, CommentEvent
+from pathlib import Path
+from typing import Any, Self, override
+
+from .cast import (
+    AsciiCast,
+    Header,
+    Event,
+    Filter,
+    OutputEvent,
+    MarkerEvent,
+    CommentEvent,
+)
 
 
 @dataclasses.dataclass
 class Action:
     action_id: str = dataclasses.field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.action_id = self.__class__.__name__
 
 
@@ -38,29 +49,19 @@ class Comment(Action):
 
 
 @dataclasses.dataclass
-class Filter:
-    filter_id: str = dataclasses.field(init=False)
-
-    def __post_init__(self):
-        self.filter_id = self.__class__.__name__
-
-    def apply(self, header, events):
-        raise NotImplementedError()
-
-
-@dataclasses.dataclass
 class RegexReplacementFilter(Filter):
     regex: str
     replacement: str
 
-    def modify_event(self, event):
+    def modify_event(self, event: Event) -> Event:
         if isinstance(event, OutputEvent):
             new_data = re.sub(self.regex, self.replacement, event.data)
             return dataclasses.replace(event, data=new_data)
         else:
             return event
 
-    def apply(self, header, events):
+    @override
+    def apply(self, header: Header, events: list[Event]) -> list[Event]:
         new_events = [self.modify_event(event) for event in events]
         return new_events
 
@@ -69,7 +70,8 @@ class RegexReplacementFilter(Filter):
 class StartMarkerFilter(Filter):
     start_label: str
 
-    def apply(self, header, events):
+    @override
+    def apply(self, header: Header, events: list[Event]) -> list[Event]:
         new_events = []
         started = False
         for event in events:
@@ -85,8 +87,9 @@ class StartMarkerFilter(Filter):
 class EndMarkerFilter(Filter):
     end_label: str
 
-    def apply(self, header, events):
-        new_events = []
+    @override
+    def apply(self, header: Header, events: list[Event]) -> list[Event]:
+        new_events: list[Event] = []
         for event in events:
             if isinstance(event, MarkerEvent):
                 if event.label == self.end_label:
@@ -97,7 +100,9 @@ class EndMarkerFilter(Filter):
 
 @dataclasses.dataclass
 class CommentFilter(Filter):
-    def modify_event(self, event, num_cols, num_rows):
+    def modify_event(
+        self, event: Event, num_cols: int, num_rows: int
+    ) -> Event:
         if not isinstance(event, CommentEvent):
             return event
         if event.top:
@@ -111,14 +116,15 @@ class CommentFilter(Filter):
         data = f'\u001b[s\u001b[{line_num};1H{comment}\u001b[u'
         return OutputEvent(event.time, data)
 
-    def apply(self, header, events):
+    @override
+    def apply(self, header: Header, events: list[Event]) -> list[Event]:
         w = header.width
         h = header.height
         new_events = [self.modify_event(event, w, h) for event in events]
         return new_events
 
 
-def parse_filter(filter_tbl):
+def parse_filter(filter_tbl: dict[str, Any]) -> Filter:
     f_class = filter_tbl['filter_id']
     kwargs = {k: v for k, v in filter_tbl.items() if k != 'filter_id'}
     if f_class == 'RegexReplacementFilter':
@@ -133,11 +139,11 @@ def parse_filter(filter_tbl):
         raise ValueError(f'Invalid filter {f_class}')
 
 
-def parse_filters(filter_list):
-    return tuple(parse_filter(filter_tbl) for filter_tbl in filter_list)
+def parse_filters(filter_list: list[dict[str, Any]]) -> list[Filter]:
+    return list(parse_filter(filter_tbl) for filter_tbl in filter_list)
 
 
-def parse_action(action_tbl):
+def parse_action(action_tbl: str | dict[str, Any]) -> str | Action:
     if isinstance(action_tbl, str):
         return action_tbl
     s_class = action_tbl['action_id']
@@ -152,17 +158,28 @@ def parse_action(action_tbl):
         raise ValueError(f'Invalid step {s_class}')
 
 
-def parse_actions(action_list):
-    return tuple(parse_action(action_tbl) for action_tbl in action_list)
+def parse_actions(
+    action_list: list[str | dict[str, Any]],
+) -> list[str | Action]:
+    return list(parse_action(action_tbl) for action_tbl in action_list)
 
 
-def send_line(proc, content, rng, typing_delay, pre_nl_delay, post_nl_delay):
+def send_line(
+    proc: 'pexpect.spawn[str]',
+    content: str,
+    rng: np.random.Generator,
+    typing_delay: tuple[float, float],
+    pre_nl_delay: tuple[float, float],
+    post_nl_delay: tuple[float, float],
+) -> float:
     for char in content:
         proc.send(char)
-        time.sleep(rng.uniform(**typing_delay))
-    time.sleep(rng.uniform(**pre_nl_delay))
+        time.sleep(rng.uniform(low=typing_delay[0], high=typing_delay[1]))
+    time.sleep(rng.uniform(low=pre_nl_delay[0], high=pre_nl_delay[1]))
     proc.send('\n')
-    final_delay = rng.uniform(**post_nl_delay)
+    final_delay: float = rng.uniform(
+        low=post_nl_delay[0], high=post_nl_delay[1]
+    )
     time.sleep(final_delay)
     return final_delay
 
@@ -170,38 +187,19 @@ def send_line(proc, content, rng, typing_delay, pre_nl_delay, post_nl_delay):
 @dataclasses.dataclass
 class Script:
     output_file: str
-    start_delay: float
-    end_delay: float
-    typing_delay: tuple[float, float]
-    pre_nl_delay: tuple[float, float]
-    post_nl_delay: tuple[float, float]
-    with_comments: bool
-    comments_at_top: bool
-    actions: tuple[str | Input | Marker | Comment]
-    filters: tuple[Filter]
+    start_delay: float = 0.3
+    end_delay: float = 0.5
+    typing_delay: tuple[float, float] = (0.05, 0.1)
+    pre_nl_delay: tuple[float, float] = (0.2, 0.2)
+    post_nl_delay: tuple[float, float] = (0.8, 1.0)
+    with_comments: bool = False
+    comments_at_top: bool = False
+    actions: list[str | Action] = dataclasses.field(default_factory=list)
+    filters: list[Filter] = dataclasses.field(default_factory=list)
     cols: int | None = None
     rows: int | None = None
 
-    @classmethod
-    def default(cls, output_file, **kwargs):
-        defaults = {
-            'output_file': output_file,
-            'start_delay': 0.3,
-            'end_delay': 0.5,
-            'typing_delay': (0.05, 0.1),
-            'pre_nl_delay': (0.2, 0.2),
-            'post_nl_delay': (0.8, 1.0),
-            'with_comments': False,
-            'comments_at_top': False,
-            'actions': tuple(),
-            'filters': tuple(),
-            'cols': None,
-            'rows': None,
-        }
-        defaults.update(**kwargs)
-        return cls(**defaults)
-
-    def with_comments_enabled(self, at_top):
+    def with_comments_enabled(self, at_top: bool) -> Self:
         # Ensure that the script has a CommentFilter to turn Comment actions
         # into OutputEvent instances.
         has_comment_filter = any(
@@ -210,28 +208,19 @@ class Script:
         if has_comment_filter:
             filters = self.filters
         else:
-            filters = self.filters + (CommentFilter(),)
+            filters = self.filters + [CommentFilter()]
         return dataclasses.replace(
             self, with_comments=True, comments_at_top=at_top, filters=filters
         )
 
-    def with_actions(self, actions):
-        return dataclasses.replace(self, actions=tuple(actions))
+    def with_actions(self, actions: list[str | Action]) -> Self:
+        return dataclasses.replace(self, actions=actions)
 
-    def with_filters(self, filters):
-        return dataclasses.replace(self, filters=tuple(filters))
+    def with_filters(self, filters: list[Filter]) -> Self:
+        return dataclasses.replace(self, filters=filters)
 
-    def run(self, quiet=False):
+    def run(self, quiet: bool = False) -> None:
         rng = np.random.default_rng(seed=12345)
-        typing_delay = dict(
-            zip(['low', 'high'], self.typing_delay, strict=True)
-        )
-        pre_nl_delay = dict(
-            zip(['low', 'high'], self.pre_nl_delay, strict=True)
-        )
-        post_nl_delay = dict(
-            zip(['low', 'high'], self.post_nl_delay, strict=True)
-        )
 
         rec_args = ['--overwrite']
 
@@ -242,13 +231,14 @@ class Script:
             rec_args.extend(['--rows', str(self.rows)])
 
         # Run inside a GNU screen session in order to display comments.
+        screen_rc = None
         if self.with_comments:
             screen_rc = tempfile.NamedTemporaryFile('w', delete=False)
             if self.comments_at_top:
-                action = 'first'
+                comment_locn = 'first'
             else:
-                action = 'last'
-            screen_rc.write(f'hardstatus always{action}line\n')
+                comment_locn = 'last'
+            screen_rc.write(f'hardstatus always{comment_locn}line\n')
             screen_rc.write('hardstatus string " "\n')
             screen_rc.write('altscreen on\n')
             screen_rc.close()
@@ -256,27 +246,31 @@ class Script:
             rec_args.insert(1, f'screen -c "{screen_rc.name}"')
 
         cmd_args = ['rec'] + rec_args + [self.output_file]
-        proc = pexpect.spawn('asciinema', cmd_args)
+        proc: pexpect.spawn[str] = pexpect.spawn(
+            'asciinema', cmd_args, encoding='utf-8'
+        )
         t0 = time.time()
-        newline_delay = 0
+        newline_delay: float = 0.0
 
         time.sleep(self.start_delay)
 
-        insert_events = []
+        insert_events: list[Event] = []
 
+        action: str | Action
         for action in self.actions:
             if isinstance(action, str):
                 content = action
-                posargs = [typing_delay, pre_nl_delay, post_nl_delay]
+                posargs = [
+                    self.typing_delay,
+                    self.pre_nl_delay,
+                    self.post_nl_delay,
+                ]
             elif isinstance(action, Input):
                 content = action.text
                 posargs = [
-                    typing_delay,
-                    {'low': action.pre_nl_delay, 'high': action.pre_nl_delay},
-                    {
-                        'low': action.post_nl_delay,
-                        'high': action.post_nl_delay,
-                    },
+                    self.typing_delay,
+                    (action.pre_nl_delay, action.pre_nl_delay),
+                    (action.post_nl_delay, action.post_nl_delay),
                 ]
             elif isinstance(action, Marker):
                 rel_time = time.time() - t0
@@ -308,7 +302,7 @@ class Script:
         proc.close()
         print()
 
-        if self.with_comments:
+        if screen_rc is not None:
             os.unlink(screen_rc.name)
 
         # Post-processing.
@@ -318,19 +312,19 @@ class Script:
         cast.save(self.output_file)
 
     @classmethod
-    def from_toml(cls, toml_file):
+    def from_toml(cls, toml_file: str | Path) -> Self:
         with open(toml_file, 'rb') as f:
             data = tomli.load(f)
         return cls.from_dict(data)
 
     @classmethod
-    def from_json(cls, json_file):
+    def from_json(cls, json_file: str | Path) -> Self:
         with open(json_file) as f:
             data = json.load(f)
         return cls.from_dict(data)
 
     @classmethod
-    def from_yaml(cls, yaml_file):
+    def from_yaml(cls, yaml_file: str | Path) -> Self:
         try:
             import yaml
         except ModuleNotFoundError as e:
@@ -342,7 +336,7 @@ class Script:
         return cls.from_dict(data)
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict[str, Any]) -> Self:
         script_data = {key: value for key, value in data.items()}
         # Convert delay ranges from lists to tuples.
         script_data['typing_delay'] = tuple(script_data['typing_delay'])
@@ -353,7 +347,7 @@ class Script:
         script_data['filters'] = parse_filters(script_data['filters'])
         return cls(**script_data)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         data = dataclasses.asdict(self)
         tuple_fields = [
             key for key, value in data.items() if isinstance(value, tuple)
@@ -362,17 +356,17 @@ class Script:
             data[k] = list(data[k])
         return data
 
-    def to_toml(self, toml_file):
+    def to_toml(self, toml_file: str | Path) -> None:
         data = self.to_dict()
         with open(toml_file, 'wb') as f:
             tomli_w.dump(data, f)
 
-    def to_json(self, json_file):
+    def to_json(self, json_file: str | Path) -> None:
         data = self.to_dict()
         with open(json_file, 'w') as f:
             json.dump(data, f, indent=4)
 
-    def to_yaml(self, yaml_file):
+    def to_yaml(self, yaml_file: str | Path) -> None:
         try:
             import yaml
         except ModuleNotFoundError as e:
